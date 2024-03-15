@@ -1,0 +1,28 @@
+{
+    "scripts": {
+        "build": "webpack --mode=production ",
+        "dist": "webpack --mode=development ",
+        "wasm-all": "npm run wasm && npm run wasm-simd",
+        "wasm": "npm run wasm-lights && npm run wasm-model",
+        "wasm-simd": "npm run wasm-lights-simd && npm run wasm-model-simd",
+        "wasm-dev": "npm run wasm-lights-dev && npm run wasm-model-dev",
+        "wasm-lights": "emcc -O3 -flto --no-entry -o lights.wasm src/lights.c  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_sort', '_raw', '_add', '_update', '_getCameraMatrix', '_getLightTexture']\"",
+        "wasm-lights-simd": "emcc -O3 -flto -msimd128 --no-entry -o lights.wasm src/lights.c  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_sort', '_raw', '_add', '_update', '_getCameraMatrix', '_getLightTexture']\"",
+        "wasm-lights-dev": "emcc -g  --no-entry -o lights.wasm src/lights.c  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init',  '_sort', '_raw', '_add', '_update', '_getCameraMatrix', '_getLightTexture']\"",
+        "wasm-model": "emcc -O3 -flto --no-entry -o model.wasm src/model.c  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_spawn', '_update', '_getCameraMatrix', '_getInstanceMatrices', '_getInstanceColors']\"",
+        "wasm-model-simd": "emcc -O3 -flto -msimd128 --no-entry -o model.wasm src/model.c  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_spawn', '_update', '_getCameraMatrix', '_getInstanceMatrices', '_getInstanceColors']\"",
+        "wasm-model-dev": "emcc -g --no-entry -o model.wasm src/model.c  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_spawn', '_update','_getCameraMatrix', '_getInstanceMatrices', '_getInstanceColors']\"",
+        "serve": "webpack serve --https --mode=development --devtool=eval-source-map --static-directory=. ./src/index.js"
+    },
+    "dependencies": {
+        "three": "git+https://github.com/mrdoob/three.js.git#dev"
+    },
+    "browser": "./src/index.js",
+    "devDependencies": {
+        "copy-webpack-plugin": "^11.0.0",
+        "http-serve": "^1.0.1",
+        "webpack": "^5.56.0",
+        "webpack-cli": "^4.9.1",
+        "webpack-dev-server": "^4.7.1"
+    }
+}
