@@ -30,7 +30,7 @@ ShaderChunk['lights_fragment_begin'] += `//glsl
             
             if( ( cv & 1u ) == 1u ) {
     
-             vec4 texel = texelFetch(listTexture, tileCoords + ivec2( clusterIndex, clusterId ), 0);
+                vec4 texel = texelFetch(listTexture, tileCoords + ivec2( clusterIndex, clusterId ), 0);
             
                 int lightIndex = 2 * 32 * clusterIndex;
                 
@@ -64,9 +64,10 @@ ShaderChunk['lights_fragment_begin'] += `//glsl
                     
                     
                         }
-                    
 
                     }
+
+                    
     
                 }
    

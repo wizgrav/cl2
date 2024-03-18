@@ -1,48 +1,72 @@
-import { BufferGeometryLoader, Color, DynamicDrawUsage, Group, InstancedMesh, MeshStandardMaterial } from "three";
+import { BufferGeometryLoader, Color, DataTexture, DynamicDrawUsage, FloatType, Group, InstancedMesh, Mesh, MeshStandardMaterial, NearestFilter, RGBAFormat } from "three";
 import gson from '../suzanne.json';
 import { MeshBasicMaterial } from "three";
 
-export class Model extends InstancedMesh {
+export class Model extends Mesh {
     
-    constructor(lights, ws, count) {
+    constructor(lights, ws) {
 
         const loader = new BufferGeometryLoader();
 
         const geometry = loader.parse( gson );
 
         geometry.computeVertexNormals();
-
         
+        geometry.isInstancedBufferGeometry = true;
+        
+        geometry.instanceCount = 0;
+
         const material = new MeshStandardMaterial();
+
+        super(geometry, material);
+
+        this.instanceTexture = { value: null };
+
+        this.sideWidth = { value: 1 };
 
         material.onBeforeCompile = (s) => {
             lights.patchShader(s);
-            s.fragmentShader = `//glsl
+
+            s.uniforms.sideWidth = this.sideWidth;
+
+            s.uniforms.instanceTexture = this.instanceTexture;
             
+            s.vertexShader = `//glsl 
+                
+                uniform float sideWidth;
+                uniform sampler2D instanceTexture;
+
+                varying vec3 vColor;
+
+            ` + s.vertexShader.replace("#include <project_vertex>", `//glsl
+                
+                    
+                    vec4 tx = texelFetch( instanceTexture, ivec2( gl_InstanceID, 0 ), 0 );
+                    
+                          
+                    transformed.xz += 4. * vec2( floor( tx.w / sideWidth), mod( tx.w, sideWidth) );
+                    
+                    vColor = tx.rgb;  
+
+                    #include <project_vertex>
+
+            `);
+
+            s.fragmentShader = `//glsl
+             varying vec3 vColor;
+
             float Rand(vec2 co){
                 return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
             }
 
             ` + s.fragmentShader.replace("#include <lights_fragment_begin>", `//glsl
-                material.specularF90 = min( 0.99, material.specularF90 + Rand(vColor.rb) );
+                material.specularF90 = min( 0.96, material.specularF90 + Rand(vColor.rb) );
                 material.roughness = Rand(vColor.gr);
-
+                material.diffuseColor = vColor;
                 #include <lights_fragment_begin>
 
             `)
         };
-
-        //lights.patchMaterial(material);
-
-
-//const material = new MeshBasicMaterial;
-        super(geometry, material, count);
-
-        this.instanceMatrix.setUsage( DynamicDrawUsage );
-
-        this.setColorAt(0, new Color());
-
-        this.instanceColor.setUsage( DynamicDrawUsage );
 
         this.wasm = ws.instance;
 
@@ -50,13 +74,12 @@ export class Model extends InstancedMesh {
 
         this.frustumCulled = false;
 
-        
-
-        
     }
 
-    config(arr) {
+    config(arr, side) {
         
+        this.sideWidth.value = side;
+
         this.wasm.exports.init();
         
         arr.forEach((o) => {
@@ -64,14 +87,14 @@ export class Model extends InstancedMesh {
             const p = o.position;
             const c = o.color;
             
-            this.wasm.exports.spawn(p.x, p.y, p.z, c.r, c.g, c.b, o.scale);
+            this.wasm.exports.spawn(p.x, p.y, p.z, c.r, c.g, c.b, o.index);
 
         });
 
-        this.instanceMatrix.array = new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getInstanceMatrices(), this.count * 16);
-
-        this.instanceColor.array = new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getInstanceColors(), this.count * 3);
-
+        this.instanceTexture.value = new DataTexture( new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getInstanceColors(), arr.length * 4), arr.length, 1, RGBAFormat, FloatType);
+        this.instanceTexture.value.minFilter = NearestFilter;
+        this.instanceTexture.value.magFilter = NearestFilter;
+        this.instanceTexture.value.needsUpdate = true;
         this.cameraMatrix = new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getCameraMatrix(), 16);
     
     }
@@ -82,11 +105,9 @@ export class Model extends InstancedMesh {
 
         this.cameraMatrix.set( this.lights.camera.matrixWorldInverse.elements );
         
-        this.count = this.wasm.exports.update( );
+        this.geometry.instanceCount = this.wasm.exports.update();
     
-        this.instanceMatrix.needsUpdate = true;
-
-        this.instanceColor.needsUpdate = true;
+        this.instanceTexture.value.needsUpdate = true;
         
     }
 

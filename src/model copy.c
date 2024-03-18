@@ -7,12 +7,11 @@
 
 #define SIZE 2048
 
-typedef struct Vec4 {
+typedef struct Vec3 {
     float x;
     float y;
     float z;
-    float w;
-} Vec4;
+} Vec3;
 
 typedef struct Mat4 {
     float te[16];
@@ -20,15 +19,18 @@ typedef struct Mat4 {
 
 
 typedef struct Object {
-    Vec4 origin;
-    Vec4 color;
+    Vec3 origin;
+    Vec3 color;
+    float scale;
 } Object;
 
 int objectCount = 0;
 
 Object objects[SIZE];
 
-Vec4 *colors;
+Mat4 *matrices = {0};
+
+Vec3 *colors;
 
 Mat4 *cameraMatrix;
 
@@ -60,7 +62,8 @@ int cmpfunc (const void * a, const void * b) {
 EMSCRIPTEN_KEEPALIVE void init( int count ){
     
     cameraMatrix = (Mat4 *) malloc( sizeof(Mat4) );
-    colors = (Vec4 *) malloc(sizeof(Vec4) * SIZE);
+    matrices = (Mat4 *) malloc(sizeof(Mat4) * SIZE);
+    colors = (Vec3 *) malloc(sizeof(Vec3) * SIZE);
 
 }
 
@@ -70,18 +73,17 @@ EMSCRIPTEN_KEEPALIVE void clear( void ) {
 
 }
 
-EMSCRIPTEN_KEEPALIVE void spawn(float ox, float oy, float oz, float cx, float cy, float cz, float index){
+EMSCRIPTEN_KEEPALIVE void spawn(float ox, float oy, float oz, float cx, float cy, float cz, float sc){
     
     Object *ob = objects + objectCount;
     
     ob->origin.x = ox;
     ob->origin.y = oy;
     ob->origin.z = oz;
-
     ob->color.x = cx;
     ob->color.y = cy;
     ob->color.z = cz;
-    ob->color.w = index;
+    ob->scale = sc;
 
     objectCount++;
 
@@ -109,9 +111,32 @@ EMSCRIPTEN_KEEPALIVE int update( void ){
 
     qsort(sorted, count, sizeof(Sorty), cmpfunc);
 
-    for(int i=0; i < count; i++) colors[i] = objects[ sorted[i].index ].color;
+    for(int i=0; i < count; i++) {
+        
+        int index = sorted[i].index;
+        
+        Object *o = objects + index;
+        
+        Mat4 *mat = matrices + i;
+        float sc = o->scale;
+        
+        mat->te[0] = sc;
+        mat->te[5] = sc;
+        mat->te[10] = sc;
+        
+        mat->te[12] = o->origin.x;
+        mat->te[13] = o->origin.y;
+        mat->te[14] = o->origin.z;
+        mat->te[15] = 1.;
+
+        colors[i] = o->color;
+    }
 
     return count;
+}
+
+EMSCRIPTEN_KEEPALIVE void *getInstanceMatrices(void){
+    return (void *) matrices;
 }
 
 EMSCRIPTEN_KEEPALIVE void *getInstanceColors(void){

@@ -34,7 +34,6 @@ function DownloadCanvasAsImage(){
 if( Screenshot ) window.addEventListener("keydown", DownloadCanvasAsImage);
 
 renderer.autoClear = false;
-renderer.setPixelRatio( window.devicePixelRatio );
 renderer.setSize( window.innerWidth, window.innerHeight );
 renderer.toneMapping = ACESFilmicToneMapping;
 renderer.domElement.tabIndex = 0;
@@ -88,14 +87,16 @@ function config() {
     let marr = [];
     
     const center = new Vector3();
-
+    
+    
     for(let i = 0; i < SIZE; i++) {
         
         for(let j = 0; j < SIZE; j++) {
 
-            marr.push( { position: new Vector3(i * 4, 0 , j * 4), color: new Color( Math.random(), Math.random(), Math.random() ), scale: 1 } );
-            center.x += i * 4;
-            center.z += j * 4;
+            const pos = new Vector3(i * 4, 0 , j * 4);
+            marr.push( { position: pos, color: new Color( Math.random(), Math.random(), Math.random() ), index: i * SIZE + j } );
+            center.x += pos.x;
+            center.z += pos.z;
 
             for(let k = 0; k < 4; k++) {
     
@@ -109,7 +110,7 @@ function config() {
     larr = shuffle(larr);
 
     lights.config(larr, params.get("shuffle") === "1" );
-    model.config(marr);
+    model.config(marr, SIZE);
     
     wisp.count = larr.length;
 
@@ -169,7 +170,7 @@ function onWindowResize() {
     camera.updateProjectionMatrix()
 
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    //renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 
     const size = new Vector2();
     

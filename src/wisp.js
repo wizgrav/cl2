@@ -48,8 +48,8 @@ const material = new ShaderMaterial({
 
             float len = length(vPosition.xy);
 
-            float a = smoothstep(0.05, 0.054, len);
-            float b = smoothstep(0.5, 0.024, len);
+            float a = smoothstep(0.05, 0.052, len);
+            float b = smoothstep(0.5, 0.02, len);
 
             gl_FragColor.rgb = mix(vec3(1.), vColor.rgb * pow(b, 12.), a );
             gl_FragColor.a = 0.;
