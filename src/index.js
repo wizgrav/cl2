@@ -16,6 +16,7 @@ const SIZE = parseInt( params.get("size") || 16 );
 const Screenshot = params.get("shot") === "1";
 
 const renderer = new WebGLRenderer({ 
+    alpha: false,
     preserveDrawingBuffer: Screenshot,
     powerPreference: "high-performance"
 });
@@ -37,7 +38,6 @@ renderer.setPixelRatio( window.devicePixelRatio );
 renderer.setSize( window.innerWidth, window.innerHeight );
 renderer.toneMapping = ACESFilmicToneMapping;
 renderer.domElement.tabIndex = 0;
-
 
 document.body.appendChild(renderer.domElement);
 
@@ -64,10 +64,28 @@ world.add( new AmbientLight(0x666666, 0.1) );
 
 let lights, model, wisp, stats;
 
+function shuffle(array) {
+    let currentIndex = array.length,  randomIndex;
+  
+    // While there remain elements to shuffle.
+    while (currentIndex > 0) {
+  
+      // Pick a remaining element.
+      randomIndex = Math.floor(Math.random() * currentIndex);
+      currentIndex--;
+  
+      // And swap it with the current element.
+      [array[currentIndex], array[randomIndex]] = [
+        array[randomIndex], array[currentIndex]];
+    }
+  
+    return array;
+  }
+
 function config() {
 
-    const larr = [];
-    const marr = [];
+    let larr = [];
+    let marr = [];
     
     const center = new Vector3();
 
@@ -88,25 +106,27 @@ function config() {
 
     }
 
-    lights.config(larr);
+    larr = shuffle(larr);
+
+    lights.config(larr, params.get("shuffle") === "1" );
     model.config(marr);
     
     wisp.count = larr.length;
 
     controls.target.copy(center).multiplyScalar(1/( SIZE * SIZE));
-    controls.maxDistance =  50;
+    controls.maxDistance =  3 * SIZE;
     controls.update();
 
 }
 
 Promise.all([ 
-    WebAssembly.instantiateStreaming(fetch('lights.wasm'), { js: { mem: new WebAssembly.Memory({ initial: 10, maximum: 10 }) } }),
-    WebAssembly.instantiateStreaming(fetch('model.wasm'), { js: { mem: new WebAssembly.Memory({ initial: 10, maximum: 10 }) } })
+    WebAssembly.instantiateStreaming(fetch('lights.wasm'), { js: { mem: new WebAssembly.Memory({ initial: 1, maximum: 20 }) } }),
+    WebAssembly.instantiateStreaming(fetch('model.wasm'), { js: { mem: new WebAssembly.Memory({ initial: 1, maximum: 20 }) } })
 ]).then( 
         (objs) => { 
     lights = new Lights(renderer, camera, objs[0]);
     
-    lights.far = 100;
+    lights.far = 6 * SIZE;
     
     model = new Model(lights, objs[1], SIZE * SIZE);
 
@@ -149,10 +169,12 @@ function onWindowResize() {
     camera.updateProjectionMatrix()
 
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 
     const size = new Vector2();
+    
     renderer.getDrawingBufferSize(size);
+    
     if(lights) lights.resize( size );
     
 }

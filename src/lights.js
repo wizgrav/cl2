@@ -9,8 +9,7 @@ class FullscreenTriangleGeometry extends BufferGeometry {
 		super();
 
 		this.setAttribute( 'position', new Float32BufferAttribute( [ - 1, 3, 0, - 1, - 1, 0, 3, - 1, 0 ], 3 ) );
-		this.setAttribute( 'uv', new Float32BufferAttribute( [ 0, 2, 0, 0, 2, 0 ], 2 ) );
-
+	
 	}
 
 }
@@ -40,9 +39,9 @@ export class Lights {
 
         this._near = 0.01;
 
-        this._far = 0;
+        this._far = 1;
 
-        this.tileParams = { value: new Vector4(16, 8, 0, 0) };
+        this.tileParams = { value: new Vector4(32, 16, 0, 0) };
 
         this.projectionMatrix = { value: this.camera.projectionMatrix }
         
@@ -64,7 +63,7 @@ export class Lights {
 
         //this.proxy = new Mesh(proxyGeometry, getDebugMaterial());
 
-        (["lightTexture", "subtileWidth", "subtileHeight", "clusterParams", "tileParams" , "projectionMatrix", "size"]).forEach((k) => {
+        (["lightTexture", "subtileWidth", "subtileHeight", "clusterParams", "tileParams" , "projectionMatrix"]).forEach((k) => {
             this.proxy.material.uniforms[k] = this[k];    
         });
         
@@ -141,6 +140,12 @@ export class Lights {
 
     patchMaterial(material) {
         material.onBeforeCompile = (s) => {
+
+            
+            if( window.WebGL2ComputeRenderingContext && this.renderer.getContext() instanceof WebGL2ComputeRenderingContext ) {
+                s.glslVersion = '310 es';
+            }
+
             material.uniforms = s.uniforms;
             const u = s.uniforms;
     
@@ -156,6 +161,10 @@ export class Lights {
 
     patchShader(s) {
         
+        if( window.WebGL2ComputeRenderingContext && this.renderer.getContext() instanceof WebGL2ComputeRenderingContext ) {
+            s.glslVersion = '310 es';
+        }
+    
         const u = s.uniforms;
 
         u.clusterParams = this.clusterParams;
@@ -168,7 +177,7 @@ export class Lights {
         
     }
 
-    config(lights) {
+    config(lights, shuffle) {
 
         this.wasm.exports.init(lights.length);
 
@@ -182,7 +191,7 @@ export class Lights {
         
         });
 
-        this.wasm.exports.sort();
+        if ( ! shuffle ) this.wasm.exports.sort();
 
         this.subtileWidth.value = Math.ceil(lights.length / 32);
 
@@ -199,6 +208,7 @@ export class Lights {
             this.origTexture.value.minFilter = NearestFilter;
             this.origTexture.value.magFilter = NearestFilter;
             this.origTexture.value.needsUpdate = true;
+
         } else {
         
             this.lightTexture.value = new DataTexture( new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getLightTexture(), lights.length * 4 * 2), 2 * lights.length, 1, RGBAFormat, FloatType);

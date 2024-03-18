@@ -24,7 +24,7 @@ export class Model extends InstancedMesh {
             }
 
             ` + s.fragmentShader.replace("#include <lights_fragment_begin>", `//glsl
-                material.specularF90 += Rand(vColor.rb);
+                material.specularF90 = min( 0.99, material.specularF90 + Rand(vColor.rb) );
                 material.roughness = Rand(vColor.gr);
 
                 #include <lights_fragment_begin>

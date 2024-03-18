@@ -5,7 +5,7 @@
 #include <emscripten/emscripten.h>
 
 
-#define SIZE 1024
+#define SIZE 2048
 
 typedef struct Vec3 {
     float x;
@@ -42,13 +42,11 @@ Sorty sorted[SIZE];
 
 //UTILS
 
-float viewZ(float x, float y, float z) {
+inline float viewZ(float x, float y, float z) {
     
     float *e = cameraMatrix->te;
 
-    float w = 1. / ( e[ 3 ] * x + e[ 7 ] * y + e[ 11 ] * z + e[ 15 ] );
-
-    return ( e[ 2 ] * x + e[ 6 ] * y + e[ 10 ] * z + e[ 14 ] ) * w;
+    return ( e[ 2 ] * x + e[ 6 ] * y + e[ 10 ] * z + e[ 14 ] );
 
 }
 
@@ -56,15 +54,6 @@ int cmpfunc (const void * a, const void * b) {
    
    return ( ((Sorty*) a )->value - ((Sorty*) b )->value );
 
-}
-
-float distanceToSquared(float x1, float y1, float z1, float x2, float y2, float z2){
-    float dx = x1 - x2;
-    float dy = y1 - y2;
-    float dz = z1 - z2;
-
-    return dx * dx + dy * dy + dz * dz;
-    
 }
 
 
@@ -112,11 +101,11 @@ EMSCRIPTEN_KEEPALIVE int update( void ){
         
         if( z > 0 ) continue;
 
-        count++;
-
         sorted[count].index = i;
 
         sorted[count].value = (unsigned short) (-z);
+
+        count++;
         
     }
 

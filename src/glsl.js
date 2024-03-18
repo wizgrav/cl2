@@ -7,8 +7,8 @@ ShaderChunk['lights_physical_pars_fragment'] += `//glsl
     uniform int subtileHeight;
     uniform int masterCount;
     uniform sampler2D lightTexture;
-    uniform highp sampler2D listTexture;
-    uniform highp usampler2D tileTexture;
+    uniform sampler2D listTexture;
+    uniform usampler2D tileTexture;
     
 `;
 
@@ -20,17 +20,17 @@ ShaderChunk['lights_fragment_begin'] += `//glsl
 
     for( int i = 0; i < masterCount; i++) {
 
-        uint cv = texelFetch( tileTexture, ivec2( txy.x * subtileHeight + clusterId, txy.y + i), 0 ).r;
+        uint cv = texelFetch( tileTexture, ivec2( txy.x * subtileHeight + clusterId, txy.y * masterCount + i), 0 ).r;
 
         ivec2 tileCoords = ivec2( txy.x * subtileWidth, txy.y * subtileHeight ) ;
         
-        int clusterIndex =  32 * i;
-
-        for(; cv != 0u ; cv >>= 1, clusterIndex++){
+        int clusterIndex =  32 * i; 
+    
+        for(; cv != 0u ; ){
             
             if( ( cv & 1u ) == 1u ) {
-                
-                vec4 texel = texelFetch(listTexture, tileCoords + ivec2( clusterIndex, clusterId ), 0);
+    
+             vec4 texel = texelFetch(listTexture, tileCoords + ivec2( clusterIndex, clusterId ), 0);
             
                 int lightIndex = 2 * 32 * clusterIndex;
                 
@@ -38,12 +38,12 @@ ShaderChunk['lights_fragment_begin'] += `//glsl
                     
                     uint value = uint(texel.x * 255.);
 
-                    texel.xyzw = texel.yzwx; 
-
+                    texel.xyzw = texel.yzwx; // rotate to iterate the rgba components
+           
                     for( int j = 0; value != 0u; j += 2, value >>= 1 ) {
 
                         if ( ( value & 1u ) == 1u ){
-
+               
                             vec4 tx = texelFetch(lightTexture, ivec2(lightIndex + j, 0), 0);
 
                             vec3 lVector = tx.xyz - geometryPosition;
@@ -61,17 +61,28 @@ ShaderChunk['lights_fragment_begin'] += `//glsl
                                 RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
                             
                             }
+                    
+                    
                         }
+                    
 
                     }
-
+    
                 }
-        }
+   
+       
+            }
+       
+            // In lieu of a ctz/ffs instruction we conditionally skip bits with a fixed step 
+            int inc = (cv & 30u) != 0u ? 1 : 5;
+            cv >>= inc;
+            clusterIndex += inc;
         }
     }
 
 `;
 
+// Calculate light positions with GPGPU
 export function getMotionMaterial() {
     return new RawShaderMaterial({
         depthTest: false,
@@ -124,12 +135,16 @@ export function getMotionMaterial() {
                 vec4 tx = texelFetch(origTexture, ivec2(x, 0), 0);
                 
                 if(isColor) {
+
                     light.rgb = hsv2rgb(vec3(tx.r, 0.5, 0.66));
                     light.a = 1.;
+
                 } else {
+
                     vec4 ptx = texelFetch(origTexture, ivec2(x + 1, 0), 0);
                     light = viewMatrix * vec4(  tx.x + sin( time * ptx.y) * ptx.z, tx.y, tx.z + cos(time * ptx.y) * ptx.z, 1. );
                     light.w = tx.w;
+                    
                 }
             
             }
@@ -157,7 +172,7 @@ export function getListMaterial() {
             lightTexture: null,
             projectionMatrix: { value: null }
         },
-        glslVersion:"300 es",
+        glslVersion: "300 es",
         vertexShader: `//glsl
             precision highp float;
             precision highp int;
@@ -203,6 +218,7 @@ export function getListMaterial() {
 
                 vID = gl_InstanceID;
                 
+                // Calculate light extents
                 vec4 ver = projectionMatrix * vec4(offset.xyz + vec3(0., radius * sign(position.y) , 0.), 1. );
                 vec4 hor = projectionMatrix * vec4(offset.xyz + vec3(radius * sign(position.x) , 0., 0.), 1. );
                 
@@ -212,13 +228,13 @@ export function getListMaterial() {
                 float sx = tileParams.x / 2.;
                 float sy = tileParams.y / 2.;
 
+                // Snap to tile
                 px = sign(position.x) > 0. ?  ceil(sx * px) / sx: floor(sx * px) / sx;
                 py = sign(position.y) > 0. ?  ceil(sy * py) / sy: floor(sy * py) / sy;
                 
 
                 gl_Position = vec4( px, py, 0., 1. );
-                //gl_Position = vec4( position.x, position.y, 0., 1. );
-
+            
             }
 
         `,
@@ -245,6 +261,7 @@ export function getListMaterial() {
                 
                 int id = vID & 31;
 
+                // Calculate the bit and set it to the appropriate rgba component
                 float v = float( 1 << (id & 7)) / 255.;
 
                 subtile = id > 15 ? ( id > 23 ? vec4( 0., 0., 0., v ) : vec4( 0., 0., v, 0. ) ) : ( id < 8 ? vec4( v, 0., 0., 0. ) : vec4( 0., v, 0., 0. ) );
@@ -264,6 +281,7 @@ export function getTileMaterial() {
         uniforms: {
             subtileWidth: null,
             subtileHeight: null,
+            masterCount: null,
             listTexture: null,
         },
         glslVersion:"300 es",
@@ -299,19 +317,19 @@ export function getTileMaterial() {
                 int x = int( gl_FragCoord.x );
                 int y = int( gl_FragCoord.y );
                 int dx = x % subtileHeight;
-                int mc = y % masterCount;
+                int dy = y % masterCount;
                 int tx = subtileWidth * ( x / subtileHeight );
-                int ty = y * subtileHeight * masterCount - mc +  dx;
-                
-                uint r = 0u;
+                int ty = ( y / masterCount ) * subtileHeight +  dx;
+                int ts = 32 * dy;
+                int tmax = min(ts + 32, subtileWidth);
+                cluster = 0u;
 
-                for(int i = 0; i < subtileWidth; i++) {
+                // Check if a batch of 32 has at least one light and toggle the appropriate bit on the master set
+                for(; ts < tmax; ts++) {
                 
-                    if( texelFetch( listTexture, ivec2(tx + i, ty), 0 ) != vec4(0.) ) r += 1u << i;
+                    if( texelFetch( listTexture, ivec2(tx + ts, ty), 0 ) != vec4(0.) ) cluster |= 1u << (ts & 31);
                 
                 }
-                
-                cluster = r;
 
             }
         
