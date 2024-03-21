@@ -31,9 +31,9 @@ export class Lights {
     
         this.clusterParams = { value: new Vector4() };
 
-        this.subtileWidth = { value: 1 };
+        this.batchCount = { value: 1 };
 
-        this.subtileHeight = { value: 24 };
+        this.depthSlices = { value: 24 };
 
         this.masterCount = { value: 1 };
 
@@ -63,7 +63,7 @@ export class Lights {
 
         //this.proxy = new Mesh(proxyGeometry, getDebugMaterial());
 
-        (["lightTexture", "subtileWidth", "subtileHeight", "clusterParams", "tileParams" , "projectionMatrix"]).forEach((k) => {
+        (["lightTexture", "batchCount", "depthSlices", "clusterParams", "tileParams" , "projectionMatrix"]).forEach((k) => {
             this.proxy.material.uniforms[k] = this[k];    
         });
         
@@ -75,7 +75,7 @@ export class Lights {
 
         this.tiler = new Mesh(new FullscreenTriangleGeometry(), getTileMaterial());
         
-        (["listTexture", "subtileWidth", "subtileHeight", "masterCount"]).forEach((k) => {
+        (["listTexture", "batchCount", "depthSlices", "masterCount"]).forEach((k) => {
             this.tiler.material.uniforms[k] = this[k];    
         });
         
@@ -116,8 +116,8 @@ export class Lights {
     set xSlices( v ) { this.tileParams.value.x = v + (v & 1); this.computeClusterParams(); }
     get ySlices() { return this.tileParams.value.y; }
     set ySlices( v ) { this.tileParams.value.y = v + (v & 1); this.computeClusterParams(); }
-    get zSlices() { return this.subtileHeight.value; }
-    set zSlices( v ) { this.subtileHeight.value = v; this.computeClusterParams(); }
+    get zSlices() { return this.depthSlices.value; }
+    set zSlices( v ) { this.depthSlices.value = v; this.computeClusterParams(); }
  
     //https://www.aortiz.me/2018/12/21/CG.html#clustered-shading
     computeClusterParams() {
@@ -130,22 +130,18 @@ export class Lights {
 
         const fnl = Math.log( this._far / this._near );
 
-        v.z = this.subtileHeight.value / fnl;
-        v.w = this.subtileHeight.value * Math.log( this._near ) / fnl;
+        v.z = this.depthSlices.value / fnl;
+        v.w = this.depthSlices.value * Math.log( this._near ) / fnl;
     
-        vt.z = 2 / ( vt.x * this.subtileWidth.value );
-        vt.w = 2 / ( vt.y * this.subtileHeight.value );
+        vt.z = 2 / ( vt.x * this.depthSlices.value );
+        vt.w = 1 / ( vt.y * this.batchCount.value );
         
     }
 
     patchMaterial(material) {
         material.onBeforeCompile = (s) => {
 
-            
-            if( window.WebGL2ComputeRenderingContext && this.renderer.getContext() instanceof WebGL2ComputeRenderingContext ) {
-                s.glslVersion = '310 es';
-            }
-
+           
             material.uniforms = s.uniforms;
             const u = s.uniforms;
     
@@ -153,26 +149,22 @@ export class Lights {
             u.lightTexture = this.lightTexture;
             u.tileTexture = this.tileTexture;
             u.listTexture = this.listTexture;
-            u.subtileWidth = this.subtileWidth;
-            u.subtileHeight = this.subtileHeight;
+            u.batchCount = this.batchCount;
+            u.depthSlices = this.depthSlices;
             u.masterCount = this.masterCount;
         }
     }
 
     patchShader(s) {
         
-        if( window.WebGL2ComputeRenderingContext && this.renderer.getContext() instanceof WebGL2ComputeRenderingContext ) {
-            s.glslVersion = '310 es';
-        }
-    
         const u = s.uniforms;
 
         u.clusterParams = this.clusterParams;
         u.lightTexture = this.lightTexture;
         u.tileTexture = this.tileTexture;
         u.listTexture = this.listTexture;
-        u.subtileWidth = this.subtileWidth;
-        u.subtileHeight = this.subtileHeight;
+        u.batchCount = this.batchCount;
+        u.depthSlices = this.depthSlices;
         u.masterCount = this.masterCount;
         
     }
@@ -193,7 +185,7 @@ export class Lights {
 
         if ( ! shuffle ) this.wasm.exports.sort();
 
-        this.subtileWidth.value = Math.ceil(lights.length / 32);
+        this.batchCount.value = Math.ceil(lights.length / 32);
 
         this.cameraMatrix = new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getCameraMatrix(), 16);
         
@@ -328,7 +320,7 @@ export class Lights {
 
         if( ! rt ) {
             const tp = this.tileParams.value;
-            rt = new WebGLRenderTarget( tp.x * this.subtileWidth.value, tp.y * this.subtileHeight.value, { 
+            rt = new WebGLRenderTarget( tp.x * this.depthSlices.value, tp.y * this.batchCount.value, { 
                 format: RGBAFormat, 
                 type: UnsignedByteType, 
                 depthBuffer: false, 
@@ -351,10 +343,10 @@ export class Lights {
 
         if( ! rt ) {
 
-            const tw = this.subtileWidth.value;
+            const tw = this.batchCount.value;
             const tp = this.tileParams.value;
             
-            rt = new WebGLRenderTarget( tp.x * this.subtileHeight.value, tp.y * this.masterCount.value, { 
+            rt = new WebGLRenderTarget( tp.x * this.depthSlices.value, tp.y * this.masterCount.value, { 
                 format: RedIntegerFormat, 
                 type: tw > 16 ? UnsignedIntType : ( tw > 8 ? UnsignedShortType : UnsignedByteType), 
                 depthBuffer: false, 

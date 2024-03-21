@@ -20,8 +20,6 @@ export class Model extends Mesh {
 
         super(geometry, material);
 
-        this.instanceTexture = { value: null };
-
         this.sideWidth = { value: 1 };
 
         material.onBeforeCompile = (s) => {
@@ -29,24 +27,18 @@ export class Model extends Mesh {
 
             s.uniforms.sideWidth = this.sideWidth;
 
-            s.uniforms.instanceTexture = this.instanceTexture;
-            
             s.vertexShader = `//glsl 
                 
                 uniform float sideWidth;
-                uniform sampler2D instanceTexture;
-
+                attribute vec4 instanceColor;
+                
                 varying vec3 vColor;
 
             ` + s.vertexShader.replace("#include <project_vertex>", `//glsl
                 
+                    transformed.xz += 4. * vec2( floor( instanceColor.w / sideWidth), mod( instanceColor.w, sideWidth) );
                     
-                    vec4 tx = texelFetch( instanceTexture, ivec2( gl_InstanceID, 0 ), 0 );
-                    
-                          
-                    transformed.xz += 4. * vec2( floor( tx.w / sideWidth), mod( tx.w, sideWidth) );
-                    
-                    vColor = tx.rgb;  
+                    vColor = instanceColor.rgb;  
 
                     #include <project_vertex>
 
@@ -91,10 +83,12 @@ export class Model extends Mesh {
 
         });
 
-        this.instanceTexture.value = new DataTexture( new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getInstanceColors(), arr.length * 4), arr.length, 1, RGBAFormat, FloatType);
-        this.instanceTexture.value.minFilter = NearestFilter;
-        this.instanceTexture.value.magFilter = NearestFilter;
-        this.instanceTexture.value.needsUpdate = true;
+        this.instanceColors = new InstancedBufferAttribute( new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getInstanceColors(), arr.length * 4), 4);
+
+        this.instanceColors.setUsage(DynamicDrawUsage);
+        
+        this.geometry.setAttribute("instanceColor", this.instanceColors);
+
         this.cameraMatrix = new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getCameraMatrix(), 16);
     
     }
@@ -105,9 +99,13 @@ export class Model extends Mesh {
 
         this.cameraMatrix.set( this.lights.camera.matrixWorldInverse.elements );
         
-        this.geometry.instanceCount = this.wasm.exports.update();
-    
-        this.instanceTexture.value.needsUpdate = true;
+        const count = this.wasm.exports.update();
+        
+        this.geometry.instanceCount = count;
+
+        this.instanceColors.addUpdateRange(0, count * 4);
+        
+        this.instanceColors.needsUpdate = true;
         
     }
 

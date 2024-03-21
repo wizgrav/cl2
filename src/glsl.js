@@ -3,8 +3,8 @@ import { ShaderChunk, AdditiveBlending, RawShaderMaterial, CustomBlending, OneFa
 ShaderChunk['lights_physical_pars_fragment'] += `//glsl
 
     uniform vec4 clusterParams;
-    uniform int subtileWidth;
-    uniform int subtileHeight;
+    uniform int batchCount;
+    uniform int depthSlices;
     uniform int masterCount;
     uniform sampler2D lightTexture;
     uniform sampler2D listTexture;
@@ -18,19 +18,19 @@ ShaderChunk['lights_fragment_begin'] += `//glsl
 
     int clusterId = int( log( vViewPosition.z ) * clusterParams.z - clusterParams.w );
 
+    ivec2 tileCoords = ivec2( txy.x * depthSlices + clusterId, txy.y ) ;
+        
     for( int i = 0; i < masterCount; i++) {
 
-        uint cv = texelFetch( tileTexture, ivec2( txy.x * subtileHeight + clusterId, txy.y * masterCount + i), 0 ).r;
+        uint cv = texelFetch( tileTexture, ivec2( tileCoords.x, txy.y * masterCount + i), 0 ).r;
 
-        ivec2 tileCoords = ivec2( txy.x * subtileWidth, txy.y * subtileHeight ) ;
-        
-        int clusterIndex =  32 * i; 
+        tileCoords.y = txy.y + 32 * i; 
     
         for(; cv != 0u ; ){
             
             if( ( cv & 1u ) == 1u ) {
     
-                vec4 texel = texelFetch(listTexture, tileCoords + ivec2( clusterIndex, clusterId ), 0);
+                vec4 texel = texelFetch(listTexture, tileCoords, 0);
             
                 int lightIndex = 2 * 32 * clusterIndex;
                 
@@ -168,8 +168,8 @@ export function getListMaterial() {
         uniforms: {
             tileParams: null,
             clusterParams: null,
-            subtileWidth: null,
-            subtileHeight: null,
+            batchCount: null,
+            depthSlices: null,
             lightTexture: null,
             projectionMatrix: { value: null }
         },
@@ -185,9 +185,9 @@ export function getListMaterial() {
 
             uniform vec4 clusterParams;
 
-            uniform int subtileWidth;
+            uniform int batchCount;
 
-            uniform int subtileHeight;
+            uniform int depthSlices;
 
             uniform mat4 projectionMatrix;
 
@@ -201,7 +201,7 @@ export function getListMaterial() {
 
                 vec4 offset = texelFetch( lightTexture, ivec2(2 * gl_InstanceID, 0), 0);
 
-                float fw = float( subtileHeight );
+                float fw = float( depthSlices );
 
                 float radius = offset.w;
 
@@ -227,12 +227,13 @@ export function getListMaterial() {
                 float py = ver.y / ver.w;
 
                 float sx = tileParams.x / 2.;
-                float sy = tileParams.y / 2.;
-
+                
                 // Snap to tile
                 px = sign(position.x) > 0. ?  ceil(sx * px) / sx: floor(sx * px) / sx;
-                py = sign(position.y) > 0. ?  ceil(sy * py) / sy: floor(sy * py) / sy;
                 
+                py = max( 0., min( 1., ( py + 1. ) / 2.));
+                py = ( float(vID / 32)  +  py ) / batchCount;
+                py = 2. * py - 1.;
 
                 gl_Position = vec4( px, py, 0., 1. );
             
@@ -244,8 +245,8 @@ export function getListMaterial() {
             precision highp float;
             precision highp int;
             
-            uniform int subtileWidth;
-            uniform int subtileHeight;
+            uniform int batchCount;
+            uniform int depthSlices;
 
             flat in ivec2 vClusters;
 
@@ -255,10 +256,9 @@ export function getListMaterial() {
 
             void main() {
                 
-                int x = int( gl_FragCoord.x ) % subtileWidth;
-                int y = int( gl_FragCoord.y ) % subtileHeight;
+                int x = int( gl_FragCoord.x ) % depthSlices;
 
-                if(x != (vID / 32) || y < vClusters.x || y > vClusters.y) discard;
+                if( x < vClusters.x || y > vClusters.y) discard;
                 
                 int id = vID & 31;
 
@@ -280,8 +280,8 @@ export function getTileMaterial() {
         depthTest: false,
         depthWrite: false,
         uniforms: {
-            subtileWidth: null,
-            subtileHeight: null,
+            batchCount: null,
+            depthSlices: null,
             masterCount: null,
             listTexture: null,
         },
@@ -305,8 +305,8 @@ export function getTileMaterial() {
             precision highp int;
             precision highp sampler2D;
             
-            uniform int subtileWidth;
-            uniform int subtileHeight;
+            uniform int batchCount;
+            uniform int depthSlices;
             uniform int masterCount;
 
             uniform sampler2D listTexture;
@@ -317,12 +317,12 @@ export function getTileMaterial() {
 
                 int x = int( gl_FragCoord.x );
                 int y = int( gl_FragCoord.y );
-                int dx = x % subtileHeight;
+                int dx = x % depthSlices;
                 int dy = y % masterCount;
-                int tx = subtileWidth * ( x / subtileHeight );
-                int ty = ( y / masterCount ) * subtileHeight +  dx;
+                int tx = batchCount * ( x / depthSlices );
+                int ty = ( y / masterCount ) * depthSlices +  dx;
                 int ts = 32 * dy;
-                int tmax = min(ts + 32, subtileWidth);
+                int tmax = min(ts + 32, batchCount);
                 cluster = 0u;
 
                 // Check if a batch of 32 has at least one light and toggle the appropriate bit on the master set
