@@ -7,19 +7,24 @@ import { Model } from './model';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AmbientLight } from 'three';
 import { Wisp } from './wisp';
+import ui from './ui.js';
+
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 
 const params = new URLSearchParams(window.location.search);
-        
+
 const SIZE = parseInt( params.get("size") || 16 ); 
 
 const Screenshot = params.get("shot") === "1";
 
 const renderer = new WebGLRenderer({ 
     alpha: false,
+    antialias: params.get("msaa") === "1",
     preserveDrawingBuffer: Screenshot,
     powerPreference: "high-performance"
 });
+      
+ui(params, renderer);
 
 function DownloadCanvasAsImage(){
     let downloadLink = document.createElement('a');
@@ -86,7 +91,7 @@ function config() {
     let larr = [];
     let marr = [];
     
-    const center = new Vector3();
+    const center = new Vector3(0, 1.75, 0);
     
     
     for(let i = 0; i < SIZE; i++) {
@@ -97,10 +102,10 @@ function config() {
             marr.push( { position: pos, color: new Color( Math.random(), Math.random(), Math.random() ), index: i * SIZE + j } );
             center.x += pos.x;
             center.z += pos.z;
-
+            
             for(let k = 0; k < 4; k++) {
     
-                larr.push({ position: new Vector3( i * 4, 0.25 + k * 0.25 , j * 4), color: new Color().setHSL(Math.random(), 0.66, 0.5) })
+                larr.push({ position: new Vector3( i * 4, 0.6 + Math.random() * 0.4 + k * 0.6 , j * 4), color: new Color().setHSL(Math.random(), 0.66, 0.5) })
 
             }
         }
@@ -115,6 +120,8 @@ function config() {
     wisp.count = larr.length;
 
     controls.target.copy(center).multiplyScalar(1/( SIZE * SIZE));
+    controls.target.y = 1.75;
+
     controls.maxDistance =  3 * SIZE;
     controls.update();
 
@@ -131,6 +138,8 @@ Promise.all([
     
     model = new Model(lights, objs[1], SIZE * SIZE);
 
+    model.position.y = 1.5;
+
     model.visible = params.get("model") !== "0";
 
     world.add( model );
@@ -138,7 +147,6 @@ Promise.all([
     const ground = new Mesh( new PlaneGeometry(1,1), new MeshStandardMaterial({ color: 0xFFFFFF, side: FrontSide } ));
     ground.rotation.x = -Math.PI / 2;
     ground.scale.multiplyScalar(1000);
-    ground.position.y = -1.5;
     ground.renderOrder = 10;
     lights.patchMaterial(ground.material);
     world.add( ground );

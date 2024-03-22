@@ -16,7 +16,7 @@ export class Model extends Mesh {
         
         geometry.instanceCount = 0;
 
-        const material = new MeshStandardMaterial();
+        const material = new MeshStandardMaterial({ dithering: true });
 
         super(geometry, material);
 
