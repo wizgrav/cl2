@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include  <string.h>
+#include <string.h>
+#include <algorithm>
 #include <emscripten/emscripten.h>
 
 
@@ -19,15 +20,10 @@ typedef struct Mat4 {
 } Mat4;
 
 
-typedef struct Object {
-    Vec4 origin;
-    Vec4 color;
-} Object;
-
 int objectCount = 0;
 
-Object objects[SIZE];
-
+Vec4 *origins;
+Vec4 *ocolors;
 Vec4 *colors;
 
 Mat4 *cameraMatrix;
@@ -39,6 +35,9 @@ typedef struct Sorty {
 Sorty sorted[SIZE];
 
 //UTILS
+
+
+extern "C" {
 
 inline float viewZ(float x, float y, float z) {
     
@@ -55,11 +54,17 @@ int cmpfunc (const void * a, const void * b) {
 }
 
 
+struct cmpp {
+    bool operator() (const Sorty a, const Sorty b) { return a.value < b.value; }
+};
+
 //API
 
 EMSCRIPTEN_KEEPALIVE void init( int count ){
     
     cameraMatrix = (Mat4 *) malloc( sizeof(Mat4) );
+    origins = (Vec4 *) malloc(sizeof(Vec4) * SIZE);
+    ocolors = (Vec4 *) malloc(sizeof(Vec4) * SIZE);
     colors = (Vec4 *) malloc(sizeof(Vec4) * SIZE);
 
 }
@@ -72,16 +77,18 @@ EMSCRIPTEN_KEEPALIVE void clear( void ) {
 
 EMSCRIPTEN_KEEPALIVE void spawn(float ox, float oy, float oz, float cx, float cy, float cz, float index){
     
-    Object *ob = objects + objectCount;
+    Vec4 *origin = origins + objectCount;
     
-    ob->origin.x = ox;
-    ob->origin.y = oy;
-    ob->origin.z = oz;
+    origin->x = ox;
+    origin->y = oy;
+    origin->z = oz;
 
-    ob->color.x = cx;
-    ob->color.y = cy;
-    ob->color.z = cz;
-    ob->color.w = index;
+    Vec4 *color = ocolors + objectCount;
+    
+    color->x = cx;
+    color->y = cy;
+    color->z = cz;
+    color->w = index;
 
     objectCount++;
 
@@ -93,9 +100,9 @@ EMSCRIPTEN_KEEPALIVE int update( void ){
     
     for(int i=0; i < objectCount; i++) {
         
-        Object *o = objects + i;
+        Vec4 *o = origins + i;
         
-        float z = viewZ( o->origin.x, o->origin.y, o->origin.z );
+        float z = viewZ( o->x, o->y, o->z );
         
         if( z > 0 ) continue;
 
@@ -107,9 +114,11 @@ EMSCRIPTEN_KEEPALIVE int update( void ){
         
     }
 
-    qsort(sorted, count, sizeof(Sorty), cmpfunc);
+    //qsort(sorted, count, sizeof(Sorty), cmpfunc);
+    std::sort(sorted, sorted + count, cmpp{});
 
-    for(int i=0; i < count; i++) colors[i] = objects[ sorted[i].index ].color;
+
+    for(int i=0; i < count; i++) colors[i] = ocolors[ sorted[i].index ];
 
     return count;
 }
@@ -120,4 +129,6 @@ EMSCRIPTEN_KEEPALIVE void *getInstanceColors(void){
 
 EMSCRIPTEN_KEEPALIVE void *getCameraMatrix(void) {
     return (void *) cameraMatrix;
+}
+
 }

@@ -9,7 +9,7 @@ import { AmbientLight } from 'three';
 import { Wisp } from './wisp';
 import ui from './ui.js';
 
-import Stats from 'three/examples/jsm/libs/stats.module.js';
+import { FPS, Query } from './query.js';
 
 const params = new URLSearchParams(window.location.search);
 
@@ -103,7 +103,7 @@ function config() {
             
             for(let k = 0; k < 4; k++) {
     
-                larr.push({ position: new Vector3( i * 4, 0.6 + Math.random() * 0.4 + k * 0.6 , j * 4), color: new Color().setHSL(Math.random(), 0.66, 0.5) })
+                larr.push({ position: new Vector3( i * 4, 0.66 + Math.random() * 0.42 + k * 0.66 , j * 4), color: new Color().setHSL(Math.random(), 0.66, 0.5) })
 
             }
         }
@@ -121,9 +121,11 @@ function config() {
     controls.target.copy(center).multiplyScalar(1/( SIZE * SIZE));
     controls.target.y = 1.75;
 
-    controls.maxDistance =  3 * SIZE;
+    controls.maxDistance =  3.3 * SIZE;
     controls.update();
 
+    lights.far = 6 * SIZE;
+    lights.near = 1;
 }
 
 Promise.all([ 
@@ -131,7 +133,7 @@ Promise.all([
     WebAssembly.instantiateStreaming(fetch('model.wasm'), { js: { mem: new WebAssembly.Memory({ initial: 1, maximum: 20 }) } })
 ]).then( 
         (objs) => { 
-    lights = new Lights(renderer, camera, objs[0]);
+    lights = new Lights(renderer, objs[0]);
     
     lights.far = 6 * SIZE;
     
@@ -160,8 +162,8 @@ Promise.all([
 
     config();
 
-    stats = new Stats();
-	document.body.appendChild( stats.dom );
+    //stats = new Stats();
+	//document.body.appendChild( stats.dom );
         
     
 });
@@ -177,8 +179,7 @@ function onWindowResize() {
     camera.updateProjectionMatrix()
 
     renderer.setSize(width, height);
-    //renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-
+    
     const size = new Vector2();
     
     renderer.getDrawingBufferSize(size);
@@ -199,33 +200,39 @@ const cameraDirection = new Vector3();
 
 let time = 0;
 
+const query = new Query(renderer, "#shade .value");
+const fps = new FPS("#fps", "#minFps", "#maxFps");
+
 renderer.setAnimationLoop(() => {
     
     const delta = clock.getDelta();
     time += delta;
 
-    renderer.clear(true, true, false);
-       
+    fps.update(time);
+
+    const cam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
+
     if( lights ) {
         
         controls.update(delta);
 
-        camera.updateMatrixWorld( true );
+        cam.updateMatrixWorld( true );
 
-        camera.getWorldDirection(cameraDirection);
+        lights.update( time, cam );
 
-        camera.getWorldPosition(cameraPosition);
+        model.update(cam);
 
-        lights.update( time );
-
-        model.update(cameraPosition, cameraDirection);
-
-        stats.update();
+        //stats.update();
 
     }
 
     //renderer.clear(true, true, false);
 
+    query.start();
+
+    renderer.clear(true, true, false);
+
     renderer.render(world, camera);
 
+    query.end(time);
 });

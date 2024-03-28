@@ -32,9 +32,11 @@ const material = new ShaderMaterial({
 
             vColor = texelFetch( lightTexture, ivec2(index + 1, 0), 0 );
             
+            vColor.a = -offset.w;
+
             vPosition = position.xyz;
 
-            gl_Position = projectionMatrix * vec4( position.xyz * offset.w * 0.2 + offset.xyz, 1. );
+            gl_Position = projectionMatrix * vec4( position.xyz * offset.w * 0.124 + offset.xyz, 1. );
 
         }
     `,
@@ -46,12 +48,12 @@ const material = new ShaderMaterial({
 
         void main() {
 
-            float len = length(vPosition.xy);
+            float len = min(0.5, length(vPosition.xy));
+            float mv = min(1., 1. - vColor.a / 64.);
+            float a = smoothstep( mix(0.01, 0.1, max(0., mv) ), 0.11, len);
+            float b = smoothstep(0.5, 0.05, len);
 
-            float a = smoothstep(0.05, 0.052, len);
-            float b = smoothstep(0.5, 0.02, len);
-
-            gl_FragColor.rgb = mix(vec3(1.), vColor.rgb * pow(b, 12.), a );
+            gl_FragColor.rgb = mix(vec3(1.), vColor.rgb * pow(b, 4.), max(0., max(0.1, a * a) *  mv) );
             gl_FragColor.a = 0.;
         }
     `

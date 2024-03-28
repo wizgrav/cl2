@@ -1,5 +1,6 @@
-import {  Vector4, BufferGeometry, DataTexture, Float32BufferAttribute, FloatType, Mesh, NearestFilter, PlaneGeometry, RGBAFormat, RGBAIntegerFormat, RawShaderMaterial, RedFormat, RedIntegerFormat, Scene, ShaderChunk, ShaderMaterial, SphereGeometry, UnsignedByteType, UnsignedIntType, UnsignedShortType, Vector2, WebGLRenderTarget, Color } from "three";
-import { getDebugMaterial, getListMaterial, getMotionMaterial, getTileMaterial } from "./glsl";
+import {  Vector4, BufferGeometry, DataTexture, Float32BufferAttribute, FloatType, Mesh, NearestFilter, PlaneGeometry, RGBAFormat, RGBAIntegerFormat, RawShaderMaterial, RedFormat, RedIntegerFormat, Scene, ShaderChunk, ShaderMaterial, SphereGeometry, UnsignedByteType, UnsignedIntType, UnsignedShortType, Vector2, WebGLRenderTarget, Color, ArrayCamera } from "three";
+import { getDebugMaterial, getListMaterial, getMotionMaterial, getTileMaterial, lights_fragment_begin, lights_physical_pars_fragment } from "./glsl";
+import { Query } from "./query";
 
 
 class FullscreenTriangleGeometry extends BufferGeometry {
@@ -19,13 +20,11 @@ const zeroColor = new Color(0);
 
 export class Lights {
 
-    constructor( renderer, camera, ws ){
+    constructor( renderer, ws ){
 
         this.renderer = renderer;
 
-        this.hasFloat = renderer.extensions.has("EXT_color_buffer_float");
-
-        this.camera = camera;
+        this.hasFloatExt = renderer.extensions.has("EXT_color_buffer_float");
 
         this.wasm = ws.instance;
     
@@ -33,18 +32,22 @@ export class Lights {
 
         this.batchCount = { value: 1 };
 
-        this.depthSlices = { value: 24 };
-
         this.masterCount = { value: 1 };
 
         this._near = 0.01;
 
         this._far = 1;
 
-        this.tileParams = { value: new Vector4(32, 16, 0, 0) };
+        this.sliceParams = { value: new Vector4(32, 18, 48, 1) };
 
-        this.projectionMatrix = { value: this.camera.projectionMatrix }
+        this.vrParams = { value: new Vector2(0, 0) };
+
+        this.projectionMatrix = { value: null };
+
+        this.viewMatrix = { value: null }
         
+        this.nearZ = { value: 0 };
+
         this.time = { value: 0 };
         
         this.lightTexture = { value: null };
@@ -61,9 +64,7 @@ export class Lights {
         
         this.proxy = new Mesh(proxyGeometry, getListMaterial());
 
-        //this.proxy = new Mesh(proxyGeometry, getDebugMaterial());
-
-        (["lightTexture", "batchCount", "depthSlices", "clusterParams", "tileParams" , "projectionMatrix"]).forEach((k) => {
+        (["lightTexture", "batchCount", "sliceParams", "clusterParams", "nearZ", "projectionMatrix"]).forEach((k) => {
             this.proxy.material.uniforms[k] = this[k];    
         });
         
@@ -75,7 +76,7 @@ export class Lights {
 
         this.tiler = new Mesh(new FullscreenTriangleGeometry(), getTileMaterial());
         
-        (["listTexture", "batchCount", "depthSlices", "masterCount"]).forEach((k) => {
+        (["listTexture", "batchCount", "sliceParams"]).forEach((k) => {
             this.tiler.material.uniforms[k] = this[k];    
         });
         
@@ -85,14 +86,14 @@ export class Lights {
 
         this.tileScene.add( this.tiler );
 
-        if ( this.hasFloat ) {
+        if ( this.hasFloatExt ) {
 
             this.origTexture = { value: null };
 
             this.animator = new Mesh(new FullscreenTriangleGeometry(), getMotionMaterial());
             
             this.animator.material.uniforms.origTexture = this.origTexture;
-            this.animator.material.uniforms.viewMatrix.value = this.camera.matrixWorldInverse;
+            this.animator.material.uniforms.viewMatrix = this.viewMatrix;
             this.animator.material.uniforms.time = this.time;
 
             this.animator.frustumCulled = false;
@@ -106,52 +107,44 @@ export class Lights {
         this.cameraMatrix = null;
 
         this.computeClusterParams();
+
+        this.query = new Query(this.renderer, "#assign .value");
     }
 
     get near() { return this._near; }
     set near( v ) { this._near = v; this.computeClusterParams(); }
     get far() { return this._far; }
     set far( v ) { this._far = v; this.computeClusterParams(); }
-    get xSlices() { return this.tileParams.value.x; }
-    set xSlices( v ) { this.tileParams.value.x = v + (v & 1); this.computeClusterParams(); }
-    get ySlices() { return this.tileParams.value.y; }
-    set ySlices( v ) { this.tileParams.value.y = v + (v & 1); this.computeClusterParams(); }
-    get zSlices() { return this.depthSlices.value; }
-    set zSlices( v ) { this.depthSlices.value = v; this.computeClusterParams(); }
- 
+    
+    slice(x, y, z) {
+        const v = this.sliceParams.value;
+        v.x = x;
+        v.y = y;
+        v.z = z;
+        this.computeClusterParams();
+    }
+
     //https://www.aortiz.me/2018/12/21/CG.html#clustered-shading
     computeClusterParams() {
 
         const v = this.clusterParams.value;
-        const vt = this.tileParams.value;
+        const vt = this.sliceParams.value;
 
         v.x = vt.x / this.size.value.x;
         v.y = vt.y / this.size.value.y;
 
         const fnl = Math.log( this._far / this._near );
 
-        v.z = this.depthSlices.value / fnl;
-        v.w = this.depthSlices.value * Math.log( this._near ) / fnl;
-    
-        vt.z = 2 / ( vt.x * this.depthSlices.value );
-        vt.w = 1 / ( vt.y * this.batchCount.value );
+        v.z = this.sliceParams.value.z / fnl;
+        v.w = this.sliceParams.value.z * Math.log( this._near ) / fnl;
         
     }
 
     patchMaterial(material) {
         material.onBeforeCompile = (s) => {
 
-           
+            this.patchShader(s);
             material.uniforms = s.uniforms;
-            const u = s.uniforms;
-    
-            u.clusterParams = this.clusterParams;
-            u.lightTexture = this.lightTexture;
-            u.tileTexture = this.tileTexture;
-            u.listTexture = this.listTexture;
-            u.batchCount = this.batchCount;
-            u.depthSlices = this.depthSlices;
-            u.masterCount = this.masterCount;
         }
     }
 
@@ -160,13 +153,18 @@ export class Lights {
         const u = s.uniforms;
 
         u.clusterParams = this.clusterParams;
+        u.sliceParams = this.sliceParams;
         u.lightTexture = this.lightTexture;
         u.tileTexture = this.tileTexture;
         u.listTexture = this.listTexture;
-        u.batchCount = this.batchCount;
-        u.depthSlices = this.depthSlices;
-        u.masterCount = this.masterCount;
         
+        s.fragmentShader = s.fragmentShader.replace('#include <lights_physical_pars_fragment>', `
+            #include <lights_physical_pars_fragment>
+            ${lights_physical_pars_fragment}
+        `).replace('#include <lights_fragment_begin>', `
+            #include <lights_fragment_begin>
+            ${lights_fragment_begin}
+        `)
     }
 
     config(lights, shuffle) {
@@ -191,9 +189,9 @@ export class Lights {
         
         this.lightCount = lights.length;
     
-        this.masterCount.value = Math.ceil( lights.length / 1024 );
+        this.sliceParams.value.w = Math.ceil( lights.length / 1024 );
 
-        if ( this.hasFloat ) {
+        if ( this.hasFloatExt ) {
     
             this.wasm.exports.raw();
             this.origTexture.value = new DataTexture( new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getLightTexture(), lights.length * 4 * 2), 2 * lights.length, 1, RGBAFormat, FloatType);
@@ -211,17 +209,38 @@ export class Lights {
     
         this.proxy.geometry.instanceCount = lights.length;
 
+        this.computeClusterParams();
+
     }
 
-    update( time ) {
+    update( time, camera ) {
 
-        if ( this.hasFloat ) { 
+        this.projectionMatrix.value = camera.projectionMatrix;
+
+        this.viewMatrix.value = camera.matrixWorldInverse;
+
+        this.nearZ.value = camera.near;
+
+        this.cameraMatrix.set( camera.matrixWorldInverse.elements );
+
+        if( camera instanceof ArrayCamera) {
+
+            this.vrParams.value.set(
+                camera.cameras[0].viewport.z,
+                camera.cameras[0].position.distanceTo(camera[1].cameras.position)
+            );
+            
+        } else {
+
+            this.vrParams.value.set( 0, 0);
+        
+        }
+
+        if ( this.hasFloatExt ) { 
 
             this.time.value = time;
     
         } else {
-
-            this.cameraMatrix.set( this.camera.matrixWorldInverse.elements );
 
             this.wasm.exports.update(time);
 
@@ -229,11 +248,11 @@ export class Lights {
         
         }
 
-        this.renderTiles();
+        this.renderTiles(camera, time);
 
     }
 
-    renderTiles() {
+    renderTiles(camera, time) {
 
         const oldRT = this.renderer.getRenderTarget();
         
@@ -245,39 +264,48 @@ export class Lights {
 
         let RT;
 
-        if ( this.hasFloat ) {
+        // Compute light positions in the GPU if possible
+        if ( this.hasFloatExt ) {
         
             RT = this.getLightTarget();
 
             this.renderer.setRenderTarget(RT);
 
-            this.renderer.render( this.animatorScene, this.camera );
+            this.renderer.render( this.animatorScene, camera );
             
             this.lightTexture.value = RT.texture;
         
         }
         
+        this.query.start();
+
+        // Generate list texture
         RT = this.getListTarget();
 
         this.renderer.setRenderTarget(RT);
 
         this.renderer.clear( true, false, false );
         
-        this.renderer.render( this.listScene, this.camera );
+        this.renderer.render( this.listScene, camera );
    
         this.listTexture.value = RT.texture;
         
+        // Gather into master texture
         RT = this.getTileTarget();
 
         this.renderer.setRenderTarget(RT);
 
-        this.renderer.render( this.tileScene, this.camera );
+        this.renderer.clear( true, false, false );
+
+        this.renderer.render( this.tileScene, camera );
    
         this.tileTexture.value = RT.texture;
 
         this.renderer.setRenderTarget(oldRT);
         this.renderer.setClearColor(tempColor, alpha);
     
+        this.query.end(time);
+        
     }
 
     resize(size) {
@@ -304,7 +332,8 @@ export class Lights {
                 stencilBuffer: false,
                 minFilter: NearestFilter,
                 magFilter: NearestFilter,
-                generateMipmaps: false
+                generateMipmaps: false,
+                samples: 0
             });
 
             this.lightTarget = rt;
@@ -319,15 +348,16 @@ export class Lights {
         let rt = this.listTarget;
 
         if( ! rt ) {
-            const tp = this.tileParams.value;
-            rt = new WebGLRenderTarget( tp.x * this.depthSlices.value, tp.y * this.batchCount.value, { 
+            const tp = this.sliceParams.value;
+            rt = new WebGLRenderTarget( tp.x * tp.z, tp.y * this.batchCount.value, { 
                 format: RGBAFormat, 
                 type: UnsignedByteType, 
                 depthBuffer: false, 
                 stencilBuffer: false,
                 minFilter: NearestFilter,
                 magFilter: NearestFilter,
-                generateMipmaps: false
+                generateMipmaps: false,
+                samples: 0
             });
 
             this.listTarget = rt;
@@ -344,9 +374,9 @@ export class Lights {
         if( ! rt ) {
 
             const tw = this.batchCount.value;
-            const tp = this.tileParams.value;
+            const tp = this.sliceParams.value;
             
-            rt = new WebGLRenderTarget( tp.x * this.depthSlices.value, tp.y * this.masterCount.value, { 
+            rt = new WebGLRenderTarget( tp.x * tp.z, tp.y * tp.w, { 
                 format: RedIntegerFormat, 
                 type: tw > 16 ? UnsignedIntType : ( tw > 8 ? UnsignedShortType : UnsignedByteType), 
                 depthBuffer: false, 
@@ -354,6 +384,7 @@ export class Lights {
                 minFilter: NearestFilter,
                 magFilter: NearestFilter,
                 generateMipmaps: false,
+                samples: 0,
                 internalFormat: tw > 16 ? "R32UI" : ( tw > 8 ? "R16UI" : "R8UI")
             });
 

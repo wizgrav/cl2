@@ -1,4 +1,4 @@
-import { BufferGeometryLoader, Color, DataTexture, DynamicDrawUsage, FloatType, Group, InstancedMesh, Mesh, MeshStandardMaterial, NearestFilter, RGBAFormat } from "three";
+import { BufferGeometryLoader, Color, DataTexture, DynamicDrawUsage, FloatType, Group, InstancedBufferAttribute, InstancedMesh, Mesh, MeshStandardMaterial, NearestFilter, RGBAFormat } from "three";
 import gson from '../suzanne.json';
 import { MeshBasicMaterial } from "three";
 
@@ -52,8 +52,8 @@ export class Model extends Mesh {
             }
 
             ` + s.fragmentShader.replace("#include <lights_fragment_begin>", `//glsl
-                material.specularF90 = min( 0.96, material.specularF90 + Rand(vColor.rb) );
-                material.roughness = Rand(vColor.gr);
+                material.specularF90 = min( 0.99, material.specularF90 + Rand(vColor.rb) );
+                material.roughness = max(0.01, Rand(vColor.gr));
                 material.diffuseColor = vColor;
                 #include <lights_fragment_begin>
 
@@ -97,7 +97,7 @@ export class Model extends Mesh {
     
         if( ! this.visible ) return;
 
-        this.cameraMatrix.set( this.lights.camera.matrixWorldInverse.elements );
+        this.cameraMatrix.set( this.lights.cameraMatrix );
         
         const count = this.wasm.exports.update();
         

@@ -9,9 +9,9 @@
         "wasm-lights": "emcc -O3 -flto --no-entry -o lights.wasm src/lights.c  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_sort', '_raw', '_add', '_update', '_getCameraMatrix', '_getLightTexture']\"",
         "wasm-lights-simd": "emcc -O3 -flto -msimd128 --no-entry -o lights.wasm src/lights.c  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_sort', '_raw', '_add', '_update', '_getCameraMatrix', '_getLightTexture']\"",
         "wasm-lights-dev": "emcc -g  --no-entry -o lights.wasm src/lights.c  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init',  '_sort', '_raw', '_add', '_update', '_getCameraMatrix', '_getLightTexture']\"",
-        "wasm-model": "emcc -O3 -flto --no-entry -o model.wasm src/model.c  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_spawn', '_update', '_getCameraMatrix', '_getInstanceColors']\"",
-        "wasm-model-simd": "emcc -O3 -flto -msimd128 --no-entry -o model.wasm src/model.c  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_spawn', '_update', '_getCameraMatrix',  '_getInstanceColors']\"",
-        "wasm-model-dev": "emcc -g --no-entry -o model.wasm src/model.c  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_spawn', '_update','_getCameraMatrix',  '_getInstanceColors']\"",
+        "wasm-model": "emcc -O3 -flto --no-entry -o model.wasm src/model.cpp  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_spawn', '_update', '_getCameraMatrix', '_getInstanceColors']\"",
+        "wasm-model-simd": "emcc -O3 -flto -msimd128 --no-entry -o model.wasm src/model.cpp  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_spawn', '_update', '_getCameraMatrix',  '_getInstanceColors']\"",
+        "wasm-model-dev": "emcc -g --no-entry -o model.wasm src/model.cpp  -s STANDALONE_WASM -s \"EXPORTED_FUNCTIONS=['_init', '_spawn', '_update','_getCameraMatrix',  '_getInstanceColors']\"",
         "serve": "webpack serve --https --mode=development --devtool=eval-source-map --static-directory=. ./src/index.js"
     },
     "dependencies": {
