@@ -7,13 +7,17 @@ export class Query {
         this.count = 0;
         this.time = 0;
         this.ext = renderer.extensions.get("EXT_disjoint_timer_query_webgl2");
+        if(!this.ext){
+            this.el.innerText = "N/A";
+            return;
+        }
         this.gl = renderer.getContext();
         this.query = this.gl.createQuery();
         this.waiting = false;
     }
 
     start() {
-        
+        if(!this.gl) return;
         if(!this.waiting) {
         
             this.gl.beginQuery(this.ext.TIME_ELAPSED_EXT, this.query);
@@ -24,6 +28,7 @@ export class Query {
 
     end(time) {
         
+        if(!this.gl) return;
         if(!this.waiting) {
         
             this.gl.endQuery(this.ext.TIME_ELAPSED_EXT);

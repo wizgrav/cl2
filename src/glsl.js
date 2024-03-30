@@ -170,6 +170,7 @@ export function getListMaterial() {
         blendDstAlpha: OneFactor,
         premultipliedAlpha: true,
         uniforms: {
+            nearZ: null,
             vrParams: null,
             sliceParams: null,
             clusterParams: null,
@@ -193,7 +194,7 @@ export function getListMaterial() {
 
             uniform float batchCount;
 
-            uniform float zNear;
+            uniform float nearZ;
 
             uniform mat4 projectionMatrix;
 
@@ -203,13 +204,17 @@ export function getListMaterial() {
 
             flat out int vID;
 
+            float square(float v) { return v * v; }
+
 
             vec4 projectSphereView(vec3 c, float r)
             {   
                 c.z = -c.z;
-                if (c.z < r) return (abs(c.x) < r && abs(c.y) < r)  ? vec4(-1., -1, 1., 1.) : vec4(-10.);
+                //if (c.z < r) return (abs(c.x) < r && abs(c.y) < r)  ? vec4(-1., -1, 1., 1.) : vec4(-10.);
                 //if (c.z < r) return vec4(-10.);
                 
+               
+
                 float P00 = projectionMatrix[0][0];
                 float P11 = projectionMatrix[1][1];
 
@@ -224,13 +229,62 @@ export function getListMaterial() {
                 float miny = (vy * c.y - cr.z) / (vy * c.z + cr.y);
                 float maxy = (vy * c.y + cr.z) / (vy * c.z - cr.y);
 
+                /*
+                if (c.z - nearZ < r) {
+                    //float k = sqrt(square(r) - square(c.z));
+                    minx = c.x - r;
+                    maxx = c.x + r;
+                    miny = c.y - r;
+                    maxy = c.y + r;    
+                } 
+                */
+                if (c.z - nearZ < r) {
+                    float k = sqrt(square(r) - square(c.z));
+                    minx = c.x - k;
+                    maxx = c.x + k;
+                    miny = c.y - k;
+                    maxy = c.y + k;    
+                } 
+
                 return vec4(minx * P00, miny * P11, maxx * P00, maxy * P11);
             }
 
-            /*
-            float square(float v) { return v * v; }
-
-            void getBoundsForAxis ( vec3 a, vec3 C, float r,  out vec3 L, out vec3 U) {
+            vec2 project_sphere_flat(float view_xy, float view_z, float radius)
+            {
+                float len = length(vec2(view_xy, view_z));
+                float sin_xy = radius / len;
+            
+                vec2 result;
+            
+                if (sin_xy < 0.999)
+                {
+                    float cos_xy = sqrt(1.0 - sin_xy * sin_xy);
+                    
+                    // Rotate both ways on the half-angles.
+                    vec2 rot_lo = mat2(cos_xy, sin_xy, -sin_xy, cos_xy) * vec2(view_xy, view_z);
+                    vec2 rot_hi = mat2(cos_xy, -sin_xy, +sin_xy, cos_xy) * vec2(view_xy, view_z);
+            
+                    // If we clip beyond near-plane, the range extends infinitely.
+                    if (rot_lo.y <= 0.0)
+                        rot_lo = vec2(-1.0, 0.0);
+                    if (rot_hi.y <= 0.0)
+                        rot_hi = vec2(+1.0, 0.0);
+            
+                    // Project result.
+                    result = vec2(rot_lo.x / rot_lo.y, rot_hi.x / rot_hi.y);
+                }
+                else
+                {
+                    // We're inside the sphere, so range is infinite in both directions.
+                    result = vec2(-1000000.0, +1000000.0);
+                }
+            
+                return result;
+            }
+            
+            
+            void getBoundsForAxis ( bool xAxis, vec3 C, float r,  out vec3 L, out vec3 U) {
+                vec3 a = xAxis ? vec3(1., 0., 0) : vec3(0., 1., 0);
                 vec2 c = vec2(dot(a, C), C.z);
                 vec2 bounds[2];
                 float tSquared = dot(c, c) - r * r;
@@ -248,14 +302,18 @@ export function getListMaterial() {
                 U = bounds[0].x * a; U.z = bounds[0].y;
             }
 
-            */
+            
             void main() {
 
                 vec4 offset = texelFetch( lightTexture, ivec2(2 * gl_InstanceID, 0), 0);
 
+                vec4 view = offset;
+                
+                view.z = -view.z;
+
                 float radius = offset.w;
 
-                if(offset.z > radius) {
+                if(offset.z > radius - nearZ) {
                     
                     gl_Position = vec4(10., 10., 0., 1.);
 
@@ -269,6 +327,10 @@ export function getListMaterial() {
 
                 vID = gl_InstanceID;
                 
+                //vec3 left, right, bottom, top;
+                //getBoundsForAxis( true, offset.xyz, offset.w,  left, right);
+                //getBoundsForAxis( false, offset.xyz, offset.w,  bottom, top);
+
                 // Calculate light extents
                 /*
                 vec4 ver = projectionMatrix * vec4(offset.xyz + vec3(0., radius * sign(position.y) , 0.), 1. );
@@ -277,16 +339,28 @@ export function getListMaterial() {
                 float px = 0.5 * ( hor.x / (hor.w + 0.0000001f) + 1.);
                 float py = 0.5 * ( ver.y / (ver.w + 0.0000001f) + 1.);
                 */
+                //vec4 ver = projectionMatrix * vec4(position.y < 0. ? bottom : top, 1. );
+                //vec4 hor = projectionMatrix * vec4(position.x < 0. ? left : right, 1. );
                 
                 
-                vec4 aabb = projectSphereView(offset.xyz, offset.w);
+                //vec4 aabb = projectSphereView(offset.xyz, offset.w);
 
-                float px = position.x < 0. ? aabb.x : aabb.z;
-                float py = position.y < 0. ? aabb.y : aabb.w;
+                //float px = position.x < 0. ? aabb.x : aabb.z;
+                //float py = position.y < 0. ? aabb.y : aabb.w;
                 
                 //getBoundsForAxis( vec3(0, 1, 0), offset.xyz, offset.w,  out vec3 L, out vec3 U)
-                px = 0.5 * (  px + 1.);
-                py = 0.5 * (  py + 1.);
+                
+                vec2 hor = project_sphere_flat(view.x, view.z, offset.w);
+                vec2 ver = project_sphere_flat(view.y, view.z, offset.w);
+                
+                float px = position.x < 0. ? hor.x : hor.y;
+                float py = position.y < 0. ? ver.x : ver.y;
+                
+                float P00 = projectionMatrix[0][0];
+                float P11 = projectionMatrix[1][1];
+
+                px = 0.5 * (  px * P00 + 1.);
+                py = 0.5 * (  py * P11 + 1.);
                 
                 float sx = float(sliceParams.x);
                 float sy = float(sliceParams.y);
