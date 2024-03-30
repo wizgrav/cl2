@@ -30,6 +30,7 @@ export default function init(params, renderer){
     el.style.cursor = "pointer";
     root.appendChild(el);
 
+    /*
     el =  document.createElement("button");
     el.innerText = "VR";
     el.style.color = "#000033";
@@ -37,5 +38,5 @@ export default function init(params, renderer){
     el.onclick = () => document.querySelector("canvas").requestFullscreen();
     el.style.cursor = "pointer";
     root.appendChild(el);
-
+*/
 }

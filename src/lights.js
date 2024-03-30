@@ -38,7 +38,7 @@ export class Lights {
 
         this._far = 1;
 
-        this.sliceParams = { value: new Vector4(32, 18, 48, 1) };
+        this.sliceParams = { value: new Vector4(32, 16, 32, 1) };
 
         this.vrParams = { value: new Vector2(0, 0) };
 

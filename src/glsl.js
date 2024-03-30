@@ -207,7 +207,7 @@ export function getListMaterial() {
             vec4 projectSphereView(vec3 c, float r)
             {   
                 c.z = -c.z;
-                if (c.z < r) return (abs(c.x) < r || abs(c.y) < r)  ? vec4(-1., -1, 1., 1.) : vec4(-10.);
+                if (c.z < r) return (abs(c.x) < r && abs(c.y) < r)  ? vec4(-1., -1, 1., 1.) : vec4(-10.);
                 //if (c.z < r) return vec4(-10.);
                 
                 float P00 = projectionMatrix[0][0];
