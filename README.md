@@ -1,6 +1,6 @@
 # Compute-Less Clustered Lighting
 
-A technique for handling thousands of lights in WebGL. It uses the GPU to slice the camera frustum into clusters and assign lights to them. 
+A technique for handling thousands of lights in WebGL by slicing the camera frustum into clusters and assigning lights to them. 
 
 ![](promo.jpg)
 
