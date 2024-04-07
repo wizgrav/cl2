@@ -104,11 +104,11 @@ EMSCRIPTEN_KEEPALIVE int update( void ){
         
         float z = viewZ( o->x, o->y, o->z );
         
-        if( z > 0 ) continue;
+        if( z > 1 ) continue;
 
         sorted[count].index = i;
 
-        sorted[count].value = (unsigned short) (-z);
+        sorted[count].value = (unsigned short) fmax( 0., (-z));
 
         count++;
         

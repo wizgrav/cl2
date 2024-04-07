@@ -1,5 +1,5 @@
-import {  Vector4, BufferGeometry, DataTexture, Float32BufferAttribute, FloatType, Mesh, NearestFilter, PlaneGeometry, RGBAFormat, RGBAIntegerFormat, RawShaderMaterial, RedFormat, RedIntegerFormat, Scene, ShaderChunk, ShaderMaterial, SphereGeometry, UnsignedByteType, UnsignedIntType, UnsignedShortType, Vector2, WebGLRenderTarget, Color, ArrayCamera } from "three";
-import { getDebugMaterial, getListMaterial, getMotionMaterial, getTileMaterial, lights_fragment_begin, lights_physical_pars_fragment } from "./glsl";
+import {  Vector4, BufferGeometry, DataTexture, Float32BufferAttribute, FloatType, Mesh, NearestFilter, PlaneGeometry, RGBAFormat, RGBAIntegerFormat, RawShaderMaterial, RedFormat, RedIntegerFormat, Scene, ShaderChunk, ShaderMaterial, SphereGeometry, UnsignedByteType, UnsignedIntType, UnsignedShortType, Vector2, WebGLRenderTarget, Color, ArrayCamera, PerspectiveCamera } from "three";
+import { getListMaterial, getMasterMaterial, lights_fragment_begin, lights_physical_pars_fragment } from "./glsl";
 import { Query } from "./query";
 
 
@@ -24,8 +24,6 @@ export class Lights {
 
         this.renderer = renderer;
 
-        this.hasFloatExt = renderer.extensions.has("EXT_color_buffer_float");
-
         this.wasm = ws.instance;
     
         this.clusterParams = { value: new Vector4() };
@@ -34,13 +32,13 @@ export class Lights {
 
         this.masterCount = { value: 1 };
 
+        this.camera = new PerspectiveCamera();
+
         this._near = 0.01;
 
         this._far = 1;
 
         this.sliceParams = { value: new Vector4(32, 16, 32, 1) };
-
-        this.vrParams = { value: new Vector2(0, 0) };
 
         this.projectionMatrix = { value: null };
 
@@ -51,7 +49,7 @@ export class Lights {
         this.time = { value: 0 };
         
         this.lightTexture = { value: null };
-        this.tileTexture = { value: null };
+        this.masterTexture = { value: null };
         this.listTexture = { value: null };
         
         this.size = { value: new Vector2() };
@@ -62,10 +60,12 @@ export class Lights {
         
         proxyGeometry.instanceCount = 0;
         
-        this.proxy = new Mesh(proxyGeometry, getListMaterial());
+        
 
+        this.proxy = new Mesh(proxyGeometry, getListMaterial());
+ 
         (["lightTexture", "batchCount", "sliceParams", "clusterParams", "nearZ", "projectionMatrix"]).forEach((k) => {
-            this.proxy.material.uniforms[k] = this[k];    
+            this.proxy.material.uniforms[k] = this[k];
         });
         
         this.proxy.frustumCulled = false;
@@ -74,7 +74,7 @@ export class Lights {
 
         this.listScene.add(this.proxy);
 
-        this.tiler = new Mesh(new FullscreenTriangleGeometry(), getTileMaterial());
+        this.tiler = new Mesh(new FullscreenTriangleGeometry(), getMasterMaterial());
         
         (["listTexture", "batchCount", "sliceParams"]).forEach((k) => {
             this.tiler.material.uniforms[k] = this[k];    
@@ -85,24 +85,6 @@ export class Lights {
         this.tileScene = new Scene();
 
         this.tileScene.add( this.tiler );
-
-        if ( this.hasFloatExt ) {
-
-            this.origTexture = { value: null };
-
-            this.animator = new Mesh(new FullscreenTriangleGeometry(), getMotionMaterial());
-            
-            this.animator.material.uniforms.origTexture = this.origTexture;
-            this.animator.material.uniforms.viewMatrix = this.viewMatrix;
-            this.animator.material.uniforms.time = this.time;
-
-            this.animator.frustumCulled = false;
-            
-            this.animatorScene = new Scene();
-
-            this.animatorScene.add( this.animator );
-
-        }
 
         this.cameraMatrix = null;
 
@@ -155,7 +137,7 @@ export class Lights {
         u.clusterParams = this.clusterParams;
         u.sliceParams = this.sliceParams;
         u.lightTexture = this.lightTexture;
-        u.tileTexture = this.tileTexture;
+        u.masterTexture = this.masterTexture;
         u.listTexture = this.listTexture;
         
         s.fragmentShader = s.fragmentShader.replace('#include <lights_physical_pars_fragment>', `
@@ -191,23 +173,9 @@ export class Lights {
     
         this.sliceParams.value.w = Math.ceil( lights.length / 1024 );
 
-        if ( this.hasFloatExt ) {
-    
-            this.wasm.exports.raw();
-            this.origTexture.value = new DataTexture( new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getLightTexture(), lights.length * 4 * 2), 2 * lights.length, 1, RGBAFormat, FloatType);
-            this.origTexture.value.minFilter = NearestFilter;
-            this.origTexture.value.magFilter = NearestFilter;
-            this.origTexture.value.needsUpdate = true;
-
-        } else {
-        
-            this.lightTexture.value = new DataTexture( new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getLightTexture(), lights.length * 4 * 2), 2 * lights.length, 1, RGBAFormat, FloatType);
-            this.lightTexture.value.minFilter = NearestFilter;
-            this.lightTexture.value.magFilter = NearestFilter;
-
-        }
-    
-        this.proxy.geometry.instanceCount = lights.length;
+        this.lightTexture.value = new DataTexture( new Float32Array(this.wasm.exports.memory.buffer, this.wasm.exports.getLightTexture(), lights.length * 4 * 2), 2 * lights.length, 1, RGBAFormat, FloatType);
+        this.lightTexture.value.minFilter = NearestFilter;
+        this.lightTexture.value.magFilter = NearestFilter;
 
         this.computeClusterParams();
 
@@ -215,44 +183,25 @@ export class Lights {
 
     update( time, camera ) {
 
+        this.nearZ.value = camera.near;
+
         this.projectionMatrix.value = camera.projectionMatrix;
 
         this.viewMatrix.value = camera.matrixWorldInverse;
 
-        this.nearZ.value = camera.near;
+        this.proxy.geometry.instanceCount = this.lightCount;
+       
+        this.cameraMatrix.set( this.viewMatrix.value.elements );
 
-        this.cameraMatrix.set( camera.matrixWorldInverse.elements );
+        this.wasm.exports.update(time);
 
-        if( camera instanceof ArrayCamera) {
+        this.lightTexture.value.needsUpdate = true;
 
-            this.vrParams.value.set(
-                camera.cameras[0].viewport.z,
-                camera.cameras[0].position.distanceTo(camera[1].cameras.position)
-            );
-            
-        } else {
-
-            this.vrParams.value.set( 0, 0);
-        
-        }
-
-        if ( this.hasFloatExt ) { 
-
-            this.time.value = time;
-    
-        } else {
-
-            this.wasm.exports.update(time);
-
-            this.lightTexture.value.needsUpdate = true;
-        
-        }
-
-        this.renderTiles(camera, time);
+        this.renderTiles(time);
 
     }
 
-    renderTiles(camera, time) {
+    renderTiles( time ) {
 
         const oldRT = this.renderer.getRenderTarget();
         
@@ -262,44 +211,29 @@ export class Lights {
         
         this.renderer.setClearColor(zeroColor, 0);
 
-        let RT;
-
-        // Compute light positions in the GPU if possible
-        if ( this.hasFloatExt ) {
-        
-            RT = this.getLightTarget();
-
-            this.renderer.setRenderTarget(RT);
-
-            this.renderer.render( this.animatorScene, camera );
-            
-            this.lightTexture.value = RT.texture;
-        
-        }
-        
         this.query.start();
 
         // Generate list texture
-        RT = this.getListTarget();
+        let RT = this.getListTarget();
 
         this.renderer.setRenderTarget(RT);
 
         this.renderer.clear( true, false, false );
         
-        this.renderer.render( this.listScene, camera );
+        this.renderer.render( this.listScene, this.camera );
    
         this.listTexture.value = RT.texture;
         
         // Gather into master texture
-        RT = this.getTileTarget();
+        RT = this.getMasterTarget();
 
         this.renderer.setRenderTarget(RT);
 
         this.renderer.clear( true, false, false );
 
-        this.renderer.render( this.tileScene, camera );
+        this.renderer.render( this.tileScene, this.camera );
    
-        this.tileTexture.value = RT.texture;
+        this.masterTexture.value = RT.texture;
 
         this.renderer.setRenderTarget(oldRT);
         this.renderer.setClearColor(tempColor, alpha);
@@ -312,35 +246,11 @@ export class Lights {
 
         this.size.value = size;
         
-        delete this.tileTarget;
+        delete this.masterTarget;
         
         delete this.listTarget;
     
         this.computeClusterParams();
-    }
-
-    getLightTarget() {
-
-        let rt = this.lightTarget;
-
-        if( ! rt ) {
-
-            rt = new WebGLRenderTarget( 2 * this.lightCount, 1, { 
-                format: RGBAFormat, 
-                type: FloatType, 
-                depthBuffer: false, 
-                stencilBuffer: false,
-                minFilter: NearestFilter,
-                magFilter: NearestFilter,
-                generateMipmaps: false,
-                samples: 0
-            });
-
-            this.lightTarget = rt;
-        }
-
-        return rt;
-
     }
 
     getListTarget() {
@@ -367,9 +277,9 @@ export class Lights {
 
     }
 
-    getTileTarget() {
+    getMasterTarget() {
 
-        let rt = this.tileTarget;
+        let rt = this.masterTarget;
 
         if( ! rt ) {
 
@@ -388,7 +298,7 @@ export class Lights {
                 internalFormat: tw > 16 ? "R32UI" : ( tw > 8 ? "R16UI" : "R8UI")
             });
 
-            this.tileTarget = rt;
+            this.masterTarget = rt;
         }
 
         return rt;

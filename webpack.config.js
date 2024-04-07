@@ -15,7 +15,10 @@ module.exports = {
             patterns: [
                 "index.html",
                 "favicon.png",
-                "suzanne.json"
+                "suzanne.json",
+                "promo.jpg",
+                "lights.wasm",
+                "model.wasm"
             ],
             options: {
               concurrency: 100,

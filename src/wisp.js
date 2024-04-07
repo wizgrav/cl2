@@ -13,7 +13,8 @@ const material = new ShaderMaterial({
     depthWrite: false,
 
     uniforms: {
-        lightTexture: null
+        lightTexture: null,
+        ipdFix: null
     },
 
     vertexShader: `//glsl
@@ -32,7 +33,7 @@ const material = new ShaderMaterial({
 
             vColor = texelFetch( lightTexture, ivec2(index + 1, 0), 0 );
             
-            vColor.a = -offset.w;
+            vColor.a = -offset.z;
 
             vPosition = position.xyz;
 
@@ -49,11 +50,11 @@ const material = new ShaderMaterial({
         void main() {
 
             float len = min(0.5, length(vPosition.xy));
-            float mv = 1. - min(1., vColor.a / 64.);
-            float a = smoothstep( mix(0.01, 0.1, mv ), 0.11, len);
+            float mv = 1. - max(0., min(1., vColor.a / 64.));
+            float a = smoothstep( mix(0.0, 0.1, mv ), 0.11, len);
             float b = smoothstep(0.5, 0.09, len);
 
-            gl_FragColor.rgb = mix(vec3(1.), vColor.rgb * pow(b, 6.), max(0., max(0.1, a * a) *  mv) );
+            gl_FragColor.rgb = mix(0.5, 1., mv) * mix(vec3(1.), vColor.rgb * pow(b, 6.), max(0., max(0.1, a * a)) );
             gl_FragColor.a = 0.;
         }
     `
@@ -67,9 +68,12 @@ export class Wisp extends Mesh {
         super(geometry, material);
         this.frustumCulled = false;
         
+        const ipdFix = {value: 0};
+
         this.material.onBeforeCompile = (s) => {
             s.uniforms.lightTexture = lights.lightTexture;
-        }
+        };
+
     }
 
     get count() {

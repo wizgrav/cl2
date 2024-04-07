@@ -1,8 +1,10 @@
 {
+    "name": "CL2",
+    "description": "Compute-Less Clustered Lighting",
+    "author": {"name": "Yannis Lytis Gravezas", "email": "wizgrav@gmail.com"},
     "scripts": {
         "build": "webpack --mode=production ",
         "dist": "webpack --mode=development ",
-        "wasm-all": "npm run wasm && npm run wasm-simd",
         "wasm": "npm run wasm-lights && npm run wasm-model",
         "wasm-simd": "npm run wasm-lights-simd && npm run wasm-model-simd",
         "wasm-dev": "npm run wasm-lights-dev && npm run wasm-model-dev",

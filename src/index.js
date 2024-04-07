@@ -1,13 +1,14 @@
 
 
 
-import {ACESFilmicToneMapping, Clock, Color, DoubleSide, FrontSide, Mesh, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, Scene, Vector2, Vector3, Vector4, WebGLRenderer } from 'three';
+import {ACESFilmicToneMapping, Clock, Color, DoubleSide, FrontSide, Group, Mesh, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry, Scene, Vector2, Vector3, Vector4, WebGLRenderer } from 'three';
 import { Lights } from './lights';
 import { Model } from './model';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { AmbientLight } from 'three';
 import { Wisp } from './wisp';
 import ui from './ui.js';
+
 
 import { FPS, Query } from './query.js';
 
@@ -24,8 +25,8 @@ const renderer = new WebGLRenderer({
     preserveDrawingBuffer: Screenshot,
     powerPreference: "high-performance"
 });
-      
-ui(params, renderer);
+
+
 
 function DownloadCanvasAsImage(){
     let downloadLink = document.createElement('a');
@@ -46,7 +47,7 @@ renderer.domElement.tabIndex = 0;
 
 document.body.appendChild(renderer.domElement);
 
-const camera = new PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 0.1, 1000 );
+const camera = new PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 0.01, 1000 );
 
 
 const controls = new OrbitControls( camera, renderer.domElement );
@@ -61,13 +62,18 @@ controls.enabled = true;
 camera.position.set(10, 50, 10);
 camera.lookAt(10, 0, 10);
 
-window.camera = camera;
+
+renderer.xr.enabled = true;
 
 const world = new Scene();
 
+
+ui(params, renderer);
+
+
 world.add( new AmbientLight(0x666666, 0.1) );
 
-let lights, model, wisp, stats;
+let lights, model, wisp;
 
 function shuffle(array) {
     let currentIndex = array.length,  randomIndex;
@@ -121,10 +127,10 @@ function config() {
     controls.target.copy(center).multiplyScalar(1/( SIZE * SIZE));
     controls.target.y = 1.75;
 
-    controls.maxDistance =  3.3 * SIZE;
+    controls.maxDistance =  4 * SIZE;
     controls.update();
 
-    lights.far = 6 * SIZE;
+    lights.far = 6.4 * SIZE;
     lights.near = 1;
 }
 
@@ -162,13 +168,22 @@ Promise.all([
 
     config();
 
-    //stats = new Stats();
-	//document.body.appendChild( stats.dom );
-        
-    
-});
+    world.onBeforeRender = (renderer, scene, camera, rt) => {
 
-//world.add(camera);
+        lights.update( time, camera );
+    
+        model.update(camera);
+    
+        query.start();
+
+    }
+
+    world.onAfterRender = (renderer, scene, camera) => {
+        
+        query.end(time);
+    
+    }
+});
 
 function onWindowResize() {
 
@@ -194,14 +209,12 @@ onWindowResize();
 
 const clock = new Clock(true);
 
-const cameraPosition = new Vector3();
-
-const cameraDirection = new Vector3();
-
 let time = 0;
 
 const query = new Query(renderer, "#shade .value");
 const fps = new FPS("#fps", "#minFps", "#maxFps");
+
+
 
 renderer.setAnimationLoop(() => {
     
@@ -210,29 +223,15 @@ renderer.setAnimationLoop(() => {
 
     fps.update(time);
 
-    const cam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
-
     if( lights ) {
         
         controls.update(delta);
 
-        cam.updateMatrixWorld( true );
-
-        lights.update( time, cam );
-
-        model.update(cam);
-
-        //stats.update();
-
     }
 
-    //renderer.clear(true, true, false);
-
-    query.start();
-
+    
     renderer.clear(true, true, false);
 
     renderer.render(world, camera);
 
-    query.end(time);
 });
