@@ -1,12 +1,12 @@
 # Compute-Less Clustered Lighting
 
-A technique for handling thousands of lights in WebGL by slicing the camera frustum into clusters and assigning lights to them. 
+A technique for handling thousands of lights in WebGL by slicing the camera frustum into clusters and assigning lights to them using the rasterization pipeline. 
 
 ![](promo.jpg)
 
 ## Technique
 
-The assignment of the lights into clusters is performed using the rasterization pipeline. We will use two textures to store the cluster lists.
+We will use two textures to store the cluster lists.
 
 ##### List texture 
 
