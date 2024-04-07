@@ -2,6 +2,7 @@
 
 A technique for handling thousands of lights in WebGL. It uses the GPU to slice the camera frustum into clusters and assign lights to them. 
 
+![](promo.jpg)
 
 ## Technique
 
