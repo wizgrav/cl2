@@ -52,9 +52,12 @@ export class Model extends Mesh {
             }
 
             ` + s.fragmentShader.replace("#include <lights_fragment_begin>", `//glsl
-                material.specularF90 = min( 0.99, material.specularF90 + Rand(vColor.rb) );
+                float m = Rand(vColor.rb);
+                material.specularF90 = 1.0;
                 material.roughness = max(0.01, Rand(vColor.gr));
-                material.diffuseColor = vColor;
+                material.diffuseColor = vColor.rgb * ( 1.0 - m ) ;
+                material.specularColor = mix( vec3( 0.04 ), vColor.rgb, m );
+	
                 #include <lights_fragment_begin>
 
             `)

@@ -68,8 +68,6 @@ export class Wisp extends Mesh {
         super(geometry, material);
         this.frustumCulled = false;
         
-        const ipdFix = {value: 0};
-
         this.material.onBeforeCompile = (s) => {
             s.uniforms.lightTexture = lights.lightTexture;
         };
